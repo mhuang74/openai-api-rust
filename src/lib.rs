@@ -43,7 +43,7 @@ pub mod api {
         /// CompletionArgs::builder().engine("davinci");
         /// ```
         #[builder(setter(into), default = "\"text-curie-001\".into()")]
-        pub(super) model: String,
+        model: String,
         /// The prompt to complete from.
         ///
         /// Defaults to `"<|endoftext|>"` which is a special token seen during training.
