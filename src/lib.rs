@@ -42,9 +42,8 @@ pub mod api {
         /// # use openai_api::api::CompletionArgs;
         /// CompletionArgs::builder().engine("davinci");
         /// ```
-        #[builder(setter(into), default = "\"davinci\".into()")]
-        #[serde(skip_serializing)]
-        pub(super) engine: String,
+        #[builder(setter(into), default = "\"text-curie-001\".into()")]
+        pub(super) model: String,
         /// The prompt to complete from.
         ///
         /// Defaults to `"<|endoftext|>"` which is a special token seen during training.
@@ -481,7 +480,7 @@ impl Client {
     ) -> Result<api::Completion> {
         let args = prompt.into();
         Ok(self
-            .post(&format!("engines/{}/completions", args.engine), args)
+            .post("completions", args)
             .await?)
     }
 
@@ -495,7 +494,7 @@ impl Client {
         prompt: impl Into<api::CompletionArgs>,
     ) -> Result<api::Completion> {
         let args = prompt.into();
-        self.post_sync(&format!("engines/{}/completions", args.engine), args)
+        self.post_sync("completions", args)
     }
 }
 
