@@ -53,8 +53,8 @@ pub mod api {
         /// # use openai_api::api::CompletionArgs;
         /// CompletionArgs::builder().prompt("Once upon a time...");
         /// ```
-        #[builder(setter(into), default = "\"<|endoftext|>\".into()")]
-        prompt: String,
+        #[builder(setter(into))]
+        prompt: Vec<String>,
         /// Maximum number of tokens to complete.
         ///
         /// Defaults to 16
@@ -110,7 +110,7 @@ pub mod api {
     impl From<&str> for CompletionArgs {
         fn from(prompt_string: &str) -> Self {
             Self {
-                prompt: prompt_string.into(),
+                prompt: vec![prompt_string.to_owned()],
                 ..CompletionArgsBuilder::default()
                     .build()
                     .expect("default should build")
@@ -457,9 +457,14 @@ impl Client {
                 serde_json::to_value(body).expect("Bug: client couldn't serialize its own type"),
             );
         match response.status() {
-            200 => Ok(response
-                .into_json_deserialize()
-                .expect("Bug: client couldn't deserialize api response")),
+            200 => {
+                match response.into_json_deserialize() {
+                    Ok(json_response) => Ok(json_response),
+                    Err(err) => {
+                        Err(Error::Api(api::ErrorMessage{message: err.to_string(), error_type: "serde".to_string()}))
+                    }
+                }
+            },
             _ => Err(Error::Api(
                 response
                     .into_json_deserialize::<api::ErrorWrapper>()
