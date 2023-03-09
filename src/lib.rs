@@ -291,6 +291,7 @@ impl surf::middleware::Middleware for BearerToken {
 }
 
 #[cfg(feature = "async")]
+#[allow(deprecated)]
 fn async_client(token: &str, base_url: &str) -> surf::Client {
     let mut async_client = surf::client();
     async_client.set_base_url(surf::Url::parse(base_url).expect("Static string should parse"));
@@ -457,13 +458,12 @@ impl Client {
                 serde_json::to_value(body).expect("Bug: client couldn't serialize its own type"),
             );
         match response.status() {
-            200 => {
-                match response.into_json_deserialize() {
-                    Ok(json_response) => Ok(json_response),
-                    Err(err) => {
-                        Err(Error::Api(api::ErrorMessage{message: err.to_string(), error_type: "serde".to_string()}))
-                    }
-                }
+            200 => match response.into_json_deserialize() {
+                Ok(json_response) => Ok(json_response),
+                Err(err) => Err(Error::Api(api::ErrorMessage {
+                    message: err.to_string(),
+                    error_type: "serde".to_string(),
+                })),
             },
             _ => Err(Error::Api(
                 response
@@ -484,9 +484,7 @@ impl Client {
         prompt: impl Into<api::CompletionArgs>,
     ) -> Result<api::Completion> {
         let args = prompt.into();
-        Ok(self
-            .post("completions", args)
-            .await?)
+        self.post("completions", args).await
     }
 
     /// Get predicted completion of the prompt synchronously
