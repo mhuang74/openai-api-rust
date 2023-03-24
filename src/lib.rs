@@ -451,27 +451,50 @@ impl Client {
         B: serde::ser::Serialize,
         R: serde::de::DeserializeOwned,
     {
+        use log::{trace, error};
+
         let response = self
             .sync_client
             .post(&format!("{}{}", self.base_url, endpoint))
             .send_json(
                 serde_json::to_value(body).expect("Bug: client couldn't serialize its own type"),
             );
-        match response.status() {
-            200 => match response.into_json_deserialize() {
-                Ok(json_response) => Ok(json_response),
-                Err(err) => Err(Error::Api(api::ErrorMessage {
-                    message: err.to_string(),
-                    error_type: "serde".to_string(),
-                })),
-            },
-            _ => Err(Error::Api(
-                response
-                    .into_json_deserialize::<api::ErrorWrapper>()
-                    .expect("Bug: client couldn't deserialize api error response")
-                    .error,
-            )),
+        if let Some(err) = &response.synthetic_error() {
+            error!("{}", &err);
+            
+            let result = Err(Error::Api(api::ErrorMessage {
+                message: err.to_string(),
+                error_type: "serde".to_string(),
+            }));
+
+            trace!("Got response: {:#?}", response.into_string());
+
+            result
+        } else {
+
+            match response.status() {
+                200 => match response.into_json_deserialize() {
+                    Ok(json_response) => Ok(json_response),
+                    Err(err) => {
+                        error!("Cannot deserialize response");
+
+                        Err(Error::Api(api::ErrorMessage {
+                            message: err.to_string(),
+                            error_type: "serde".to_string(),
+                        }))
+
+                    },
+                },
+                _ => Err(Error::Api(
+                    response
+                        .into_json_deserialize::<api::ErrorWrapper>()
+                        .expect("Bug: client couldn't deserialize api error response")
+                        .error,
+                )),
+            }
+
         }
+
     }
 
     /// Get predicted completion of the prompt
@@ -496,8 +519,33 @@ impl Client {
         &self,
         prompt: impl Into<api::CompletionArgs>,
     ) -> Result<api::Completion> {
+        use std::{thread, time::Duration};
+
+        use log::trace;
+
         let args = prompt.into();
-        self.post_sync("completions", args)
+
+        let mut tries: u32 = 0;
+        while tries < 5 {
+
+            let result = self.post_sync("completions", args.clone());
+
+            if result.is_ok() {
+                return result;
+            } else {
+                let sleep: u64 = ((tries as f64).exp() * 1000.).round() as u64;
+                trace!("Completion API call try {} failed, will sleep {} ms and try again...", tries, sleep);
+                tries += 1;
+                // sleep a bit then continue
+                thread::sleep(Duration::from_millis(sleep));
+            };
+
+        };
+
+        Err(Error::Api(api::ErrorMessage {
+            message: "Failed to call Completion API within max retries".to_string(),
+            error_type: "API".to_string(),
+        }))
     }
 }
 
